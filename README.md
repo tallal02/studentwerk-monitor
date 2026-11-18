@@ -4,6 +4,8 @@ Monitor for [Studierendenwerk Dortmund's current housing offers](https://www.stw
 
 The isolated [GitHub Actions cloud notification test passed](https://github.com/tallal02/studentwerk-monitor/actions/runs/44398260018): 32 tests passed on Linux, and both notification services accepted their test messages without any housing-site access. Live housing monitoring remains paused. See [free hosting status and remaining work](FREE_HOSTING.md).
 
+The cloud worker now passes 50 tests, including encrypted state restoration and the two-hour schedule. Its [single live validation](https://github.com/tallal02/studentwerk-monitor/actions/runs/44404616264) encountered manual spam verification and automatically disabled the workflow. An approved unattended access method is still needed. A [draft technical enquiry](ACCESS_REQUEST.md) is available; it has not been sent.
+
 ## Agreed behaviour
 
 - German time (`Europe/Berlin`), following summer/winter time automatically.

@@ -47,6 +47,10 @@ The public workflow is manual-only, uses a pinned official checkout action, has 
 
 The user reported that normal manual access returned after restarting the router. No further housing-page requests have been made from the Mac. Cloud hosting must not be presented as a way to solve an access block: its verification/session behaviour still needs a supported, reliable access method before live monitoring can be enabled. A deployment is not complete merely because a test notification was delivered.
 
+On 18 November 2026, both [initial cloud state validation](https://github.com/tallal02/studentwerk-monitor/actions/runs/44403913193) and [encrypted state restoration](https://github.com/tallal02/studentwerk-monitor/actions/runs/44404262350) passed without housing access. The latter passed all 50 offline tests.
+
+The subsequent [single live cloud validation](https://github.com/tallal02/studentwerk-monitor/actions/runs/44404616264) reached the site's manual spam-verification page. It did not solve or submit that verification. The worker recorded a persistent pause, both notification services accepted the error alerts, the encrypted paused state was saved, and the workflow disabled itself. `LIVE_HOUSING_ENABLED` remains `false`. No repeated or scheduled housing request followed. The remaining issue is an authorized access method that works unattended, such as an official feed or supported integration. The user’s working browser session is not transferred to GitHub.
+
 The cloud reader, encrypted persistent listing history and schedule have offline tests. Live validation remains necessary. The cloud schedule must never automatically retry the site after an access refusal.
 
 GitHub's current documentation supports timezone-aware schedules but warns that scheduled jobs can be delayed or dropped under load; exact-time execution cannot be promised. Approximately two-hour checks would create about 220–240 invocations per month, before any exceptional tests. A longer interval can reduce invocations further if needed.
