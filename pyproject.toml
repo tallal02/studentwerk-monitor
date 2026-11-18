@@ -1,0 +1,10 @@
+[project]
+name = "studentwerk-monitor"
+version = "0.1.0"
+description = "A local Dortmund housing monitor using your Brave browser."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+studentwerk-monitor = "studentwerk_monitor.app:main"
+
