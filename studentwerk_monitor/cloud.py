@@ -94,8 +94,11 @@ def main() -> int:
         restore_state(encrypted, home, key)
         state = State(home)
         result = run_worker(state, environment.get("CLOUD_MODE", "status"), environment)
-    except ConfigurationError as exc:
-        error = str(exc)
+    except Exception as exc:
+        error = str(exc) if isinstance(exc, ConfigurationError) else f"Cloud worker stopped after {type(exc).__name__}; website access remains paused."
+        if state is not None:
+            with state.db:
+                state.put("access_paused", True)
     finally:
         if state is not None:
             state.close()

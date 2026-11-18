@@ -1,9 +1,11 @@
 import importlib.util
 import io
+import os
 import tempfile
 import threading
 import unittest
 from datetime import datetime
+from contextlib import redirect_stdout
 from email.message import Message
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -112,6 +114,26 @@ class CloudScheduleTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("cryptography"), "Cloud encryption dependency is installed by the monitor workflow")
 class SealedStateTests(unittest.TestCase):
+    def test_unexpected_worker_error_preserves_pause_without_printing_error_details(self):
+        from cryptography.fernet import Fernet
+        from studentwerk_monitor.cloud import main
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            key = Fernet.generate_key().decode()
+            output = io.StringIO()
+            with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "CLOUD_STATE_KEY": key, "CLOUD_MODE": "status"}, clear=True),
+                patch("studentwerk_monitor.cloud.Path", side_effect=lambda name: root / name),
+                patch("studentwerk_monitor.cloud.run_worker", side_effect=RuntimeError("private diagnostic value")),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(main(), 1)
+            self.assertNotIn("private diagnostic value", output.getvalue())
+            restore_state(root / ".cloud-state.enc", root / "restored", key)
+            restored = State(root / "restored")
+            self.assertTrue(restored.get("access_paused"))
+            restored.close()
+
     def test_roundtrip_keeps_history_and_pause_private(self):
         from cryptography.fernet import Fernet
         with tempfile.TemporaryDirectory() as folder:
