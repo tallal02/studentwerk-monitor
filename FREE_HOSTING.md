@@ -6,7 +6,11 @@ Requirement: no paid subscription, and no need to leave the Mac awake. A larger 
 
 The workflow `.github/workflows/notification-test.yml` runs only when manually dispatched. It sends two clearly labelled **cloud test** notifications, includes the real GitHub run link, and does not fetch the housing website. It does not enable recurring checks. The Mac-only browser adapter is not a working cloud housing reader.
 
+Verified on 18 November 2026 at approximately 22:08 Europe/Berlin: the [cloud notification test](https://github.com/tallal02/studentwerk-monitor/actions/runs/44398260018) succeeded on GitHub's standard `ubuntu-latest` runner. All 32 offline tests passed, and Telegram and Gmail accepted their clearly labelled cloud test messages. This is evidence of cloud execution and notification sending, not evidence of working live housing access. The earlier 22:00 local calendar test did not trigger and was removed.
+
 Approved repository: `tallal02/studentwerk-monitor`. The user approved publication of the reviewed source and storage of notification credentials in GitHub Actions secrets. Using a **public repository with a standard Linux GitHub-hosted runner** keeps runner execution free. Private repositories have an included allowance and potentially paid overages, so they require a verified zero-spend configuration before activation under the free-only constraint.
+
+The [repository is now published](https://github.com/tallal02/studentwerk-monitor), and the five notification values below are stored in encrypted GitHub Actions secrets. No paid runners, subscriptions or recurring housing checks were enabled.
 
 The proposed publication includes source, tests and documentation only. Runtime configuration, credentials, databases, reports and logs stay in the user's private Application Support folder. Notification credentials would be copied directly to encrypted GitHub Actions secrets; secret values must not appear in commits, workflow definitions or logs.
 
