@@ -9,4 +9,8 @@ config.json
 *.db-*
 *.log
 .DS_Store
+.cloud-venv/
+.cloud-private/
+.cloud-state.enc
+cloud-state.key
 

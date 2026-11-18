@@ -1,6 +1,6 @@
 # Dortmund housing monitor
 
-Local prototype for [Studierendenwerk Dortmund's current housing offers](https://www.stwdo.de/wohnen/aktuelle-wohnangebote), using your normal Brave browser. Python 3.11+ and macOS are required; there are no third-party Python dependencies. The final deployment must run while the laptop is off and cost nothing; this prototype does not yet satisfy that hosting requirement. A longer cloud check interval is acceptable to stay within a free service's allowance.
+Monitor for [Studierendenwerk Dortmund's current housing offers](https://www.stwdo.de/wohnen/aktuelle-wohnangebote). The original Mac/Brave prototype uses Python 3.11+ without third-party dependencies. The prepared cloud worker runs independently on GitHub Actions, uses the pinned encryption dependency in `requirements-cloud.txt`, and has a two-hour schedule. Live cloud access is disabled pending validation. See [cloud setup and exact schedule](FREE_HOSTING.md).
 
 The isolated [GitHub Actions cloud notification test passed](https://github.com/tallal02/studentwerk-monitor/actions/runs/44398260018): 32 tests passed on Linux, and both notification services accepted their test messages without any housing-site access. Live housing monitoring remains paused. See [free hosting status and remaining work](FREE_HOSTING.md).
 

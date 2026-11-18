@@ -1,0 +1,81 @@
+name: Dortmund housing monitor (paused until enabled)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        description: Status never accesses the housing website
+        options:
+          - status
+          - recover-access
+          - tick
+        default: status
+      manual_access_confirmed:
+        type: boolean
+        description: Only select after normal manual website access has recovered
+        default: false
+  schedule:
+    - cron: '0 9-23/2 * * 1'
+      timezone: Europe/Berlin
+    - cron: '0 1-23/2 * * 2-4'
+      timezone: Europe/Berlin
+    - cron: '0 1-21/2 * * 5'
+      timezone: Europe/Berlin
+    - cron: '30 23 * * 5'
+      timezone: Europe/Berlin
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: housing-monitor-state
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    if: github.event_name == 'workflow_dispatch' || vars.LIVE_HOUSING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install cloud encryption dependency in an isolated environment
+        run: |
+          python3 -m venv .cloud-venv
+          .cloud-venv/bin/python -m pip install --disable-pip-version-check -r requirements-cloud.txt
+      - name: Run offline tests only
+        run: .cloud-venv/bin/python -m unittest discover -q
+      - name: Restore encrypted listing history
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cloud-state.enc
+          key: housing-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: housing-state-v1-
+      - name: Run requested operation
+        id: worker
+        env:
+          CLOUD_MODE: ${{ github.event_name == 'schedule' && 'tick' || inputs.mode }}
+          LIVE_HOUSING_ENABLED: ${{ vars.LIVE_HOUSING_ENABLED }}
+          MANUAL_ACCESS_CONFIRMED: ${{ inputs.manual_access_confirmed }}
+          CLOUD_STATE_KEY: ${{ secrets.CLOUD_STATE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_RECIPIENT: ${{ secrets.GMAIL_RECIPIENT }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: .cloud-venv/bin/python -m studentwerk_monitor.cloud
+      - name: Save encrypted listing history, including any access pause
+        if: always() && steps.worker.outputs.state_written == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cloud-state.enc
+          key: housing-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Disable this workflow after any failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/monitor.yml/disable"
