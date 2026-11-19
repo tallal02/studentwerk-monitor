@@ -83,6 +83,10 @@ class State:
                 (event_key, channel, payload, time.time()),
             )
 
+    def notice(self, event_key: str, title: str, body: str, channels: tuple[str, ...]) -> None:
+        with self.db:
+            self._enqueue(event_key, title, body, channels)
+
     def record_snapshot(self, offers: list[Offer], channels: tuple[str, ...]) -> tuple[bool, list[Offer]]:
         """The first successful snapshot is a baseline. Invalid pages never reach here."""
         dortmund = [offer for offer in offers if offer.is_dortmund]

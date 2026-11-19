@@ -15,11 +15,15 @@ This is 56 planned jobs per week. Actual GitHub scheduling can be delayed. A sha
 
 `LIVE_HOUSING_ENABLED` is initially `false`, so scheduled jobs do not start a runner or fetch the website. Manual `status` mode only validates state handling. A fresh or missing state cache always starts paused, regardless of that variable.
 
-The cloud reader uses one transparent HTTP GET, follows no redirects, and does not click verification controls or submit forms. A verification screen, refused access, network error or unexpected response pauses access. A failed workflow also disables itself through GitHub's API. Cloud access must be validated separately from the earlier browser test: a verification-only response means unattended reading is not yet possible.
+The raw HTTP reader is retained for diagnostics and offline tests. The prepared production reader uses an isolated Chromium browser with its default identity, following the same ordinary consent-checkbox flow previously tested in Brave. It waits ten seconds before interacting and spaces subsequent main-document navigations by at least ten seconds. It makes one page visit, does not reload, allows at most one normal form POST and four document navigations including redirects, and stops on access refusals. It does not forge verification tokens, change fingerprints or solve interactive CAPTCHA puzzles. Normal page resources are additional HTTP requests, so one browser check is not a promise of one HTTP request in total.
+
+Only the known mosparo form's consent checkbox is handled. Unrecognized challenges, a rejected consent flow, refused access, network errors or unexpected content pause access. The isolated cloud browser's own session state is encrypted with listing history; no personal Mac browser state is copied. A failed workflow disables itself through GitHub's API. Cloud access still requires validation.
 
 Listing history, the pause and independent notification delivery records are stored in an authenticated, encrypted GitHub Actions cache. The encryption key is a separate `CLOUD_STATE_KEY` Actions secret. Only the encrypted cache file is uploaded; credentials and the plaintext database are excluded. The repository's standard 10 GB free cache limit is not increased. The cloud dependency is pinned in `requirements-cloud.txt`.
 
-The manual `recover-access` operation requires `manual_access_confirmed=true` and performs at most one request. It does not enable the two-hour schedule; successful validation and persisted state must be verified before setting `LIVE_HOUSING_ENABLED=true`.
+The manual `recover-access` operation requires `manual_access_confirmed=true` and performs one bounded browser visit. It does not enable the two-hour schedule; successful validation and persisted state must be verified before setting `LIVE_HOUSING_ENABLED=true`.
+
+For a delayed one-time validation, `VALIDATION_NOT_BEFORE` may contain an explicit timezone-aware time. A scheduled tick waits until that time, consumes that approval once, and uses the same two-hour cooldown. The approval expires after two hours. A successful validation clears the access pause and sends an activation notice; a failure pauses and disables the workflow. This option is inactive unless explicitly configured.
 
 ## Prepared next step
 
@@ -51,7 +55,7 @@ On 18 November 2026, both [initial cloud state validation](https://github.com/ta
 
 The subsequent [single live cloud validation](https://github.com/tallal02/studentwerk-monitor/actions/runs/44404616264) reached the site's manual spam-verification page. It did not solve or submit that verification. The worker recorded a persistent pause, both notification services accepted the error alerts, the encrypted paused state was saved, and the workflow disabled itself. `LIVE_HOUSING_ENABLED` remains `false`. No repeated or scheduled housing request followed. The remaining issue is an authorized access method that works unattended, such as an official feed or supported integration. The user’s working browser session is not transferred to GitHub.
 
-The cloud reader, encrypted persistent listing history and schedule have offline tests. Live validation remains necessary. The cloud schedule must never automatically retry the site after an access refusal.
+The cloud reader, encrypted persistent listing history and schedule have offline tests. Browser fixtures run entirely against a loopback test server, including a normal consent POST/redirect and cookie reuse. Live browser validation remains necessary. The cloud schedule must never automatically retry the site after an access refusal.
 
 GitHub's current documentation supports timezone-aware schedules but warns that scheduled jobs can be delayed or dropped under load; exact-time execution cannot be promised. Approximately two-hour checks would create about 220–240 invocations per month, before any exceptional tests. A longer interval can reduce invocations further if needed.
 

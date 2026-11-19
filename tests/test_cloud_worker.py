@@ -242,3 +242,84 @@ class CloudWorkerTests(unittest.TestCase):
         self.activate_fixture()
         self.assertTrue(self.run_worker(value="2026-11-21T09:00:00")["outside_window"])
         self.reader.fetch.assert_not_called()
+
+    def test_staged_validation_waits_until_approved_time_and_then_activates(self):
+        self.environment["LIVE_HOUSING_ENABLED"] = "true"
+        self.environment["VALIDATION_NOT_BEFORE"] = when("2026-11-19T01:00:00").isoformat()
+        self.assertTrue(self.run_worker(value="2026-11-18T23:00:00")["waiting_for_validation_time"])
+        self.reader.fetch.assert_not_called()
+        result = self.run_worker(value="2026-11-19T01:00:00")
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["access_paused"])
+        self.assertEqual(result["mode"], "scheduled-validation")
+        self.assertEqual(self.notifier.send.call_count, 2)
+        self.assertTrue(self.run_worker(value="2026-11-19T03:00:00")["ok"])
+        self.assertEqual(self.reader.fetch.call_count, 2)
+
+    @patch("studentwerk_monitor.app.local_notification")
+    def test_failed_staged_validation_cannot_repeat(self, notification):
+        self.environment["LIVE_HOUSING_ENABLED"] = "true"
+        self.environment["VALIDATION_NOT_BEFORE"] = when("2026-11-19T01:00:00").isoformat()
+        self.reader.fetch.side_effect = AccessDenied("Refused")
+        self.assertFalse(self.run_worker(value="2026-11-19T01:00:00")["ok"])
+        self.assertTrue(self.run_worker(value="2026-11-19T03:00:00")["access_paused"])
+        self.reader.fetch.assert_called_once()
+
+    def test_expired_staged_validation_makes_no_request(self):
+        self.environment["LIVE_HOUSING_ENABLED"] = "true"
+        self.environment["VALIDATION_NOT_BEFORE"] = when("2026-11-19T01:00:00").isoformat()
+        with self.assertRaises(ConfigurationError):
+            self.run_worker(value="2026-11-19T03:01:00")
+        self.reader.fetch.assert_not_called()
+
+
+@unittest.skipUnless(os.environ.get("RUN_BROWSER_TESTS") == "1", "Browser fixture tests run in the isolated cloud job")
+class RealBrowserFixtureTests(unittest.TestCase):
+    def test_normal_consent_auto_submit_is_not_replayed_and_session_is_retained(self):
+        from studentwerk_monitor.cloud_browser import CloudBrowserReader
+        requests = []
+        class Handler(BaseHTTPRequestHandler):
+            def send_html(self, html):
+                data = html.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_GET(self):
+                if self.path == "/favicon.ico":
+                    self.send_response(204)
+                    self.end_headers()
+                    return
+                requests.append(("GET", self.path))
+                if self.path == "/rooms" or "access=ok" in self.headers.get("Cookie", ""):
+                    self.send_html(HTML)
+                else:
+                    self.send_html('''<main><form id="housing-offers-access-form" method="POST">
+                    <input type="checkbox" required name="_mosparo_checkboxField_test" onchange="document.getElementById('status').innerText='Ihre Daten enthalten kein Spam';this.form.requestSubmit()">
+                    <p id="status"></p></form></main>''')
+            def do_POST(self):
+                requests.append(("POST", self.path))
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                self.send_response(303)
+                self.send_header("Location", "/rooms")
+                self.send_header("Set-Cookie", "access=ok; Path=/")
+                self.end_headers()
+            def log_message(self, *_):
+                pass
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            options = {"url": f"http://127.0.0.1:{server.server_port}/gate", "delay_seconds": 0, "executable_path": os.environ.get("STUDENTWERK_TEST_BROWSER")}
+            reader = CloudBrowserReader(**options)
+            self.assertEqual(len(reader.fetch()), 2)
+            self.assertEqual(requests, [("GET", "/gate"), ("POST", "/gate"), ("GET", "/rooms")])
+            second = CloudBrowserReader(storage_state=reader.storage_state, **options)
+            self.assertEqual(len(second.fetch()), 2)
+            self.assertEqual(requests[-1], ("GET", "/gate"))
+            self.assertEqual(sum(method == "POST" for method, _ in requests), 1)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()

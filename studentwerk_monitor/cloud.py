@@ -6,11 +6,11 @@ from datetime import datetime
 from pathlib import Path
 
 from .app import check_once
+from .cloud_browser import CloudBrowserReader
 from .cloud_schedule import cloud_due_slot, next_cloud_slot
 from .cloud_test import SECRET_FIELDS
 from .config import CHANNELS, ConfigurationError
 from .notifications import Notifier, deliver_pending
-from .reader import CloudReader
 from .schedule import local_now
 from .sealed_state import restore_state, seal_state
 from .state import State
@@ -48,12 +48,30 @@ def run_worker(state: State, mode: str, environment: dict, *, now: datetime | No
         if slot is None:
             return {**common, "checked": False, "outside_window": True}
         if state.get("access_paused", True):
-            return {**common, "checked": False, "access_paused": True}
+            approval = environment.get("VALIDATION_NOT_BEFORE", "")
+            if not approval or state.get("scheduled_validation_used") == approval:
+                return {**common, "checked": False, "access_paused": True}
+            try:
+                approved_at = datetime.fromisoformat(approval)
+                if approved_at.tzinfo is None:
+                    raise ValueError()
+            except ValueError:
+                raise ConfigurationError("The scheduled validation time is invalid.") from None
+            age = (now - approved_at).total_seconds()
+            if age < 0:
+                return {**common, "checked": False, "access_paused": True, "waiting_for_validation_time": True}
+            if age >= 7200:
+                raise ConfigurationError("The one-time cloud validation window was missed. No website request was made.")
+            with state.db:
+                state.put("scheduled_validation_used", approval)
+            mode = "recover-access"
+            common["mode"] = "scheduled-validation"
         if not state.claim_slot(slot.isoformat()):
             return {**common, "checked": False, "already_checked": True}
     config = config_from_environment(environment)
+    active_reader = reader or CloudBrowserReader(storage_state=state.get("browser_storage"))
     result = check_once(
-        state, reader or CloudReader(), CHANNELS, now=now,
+        state, active_reader, CHANNELS, now=now,
         allow_paused=(mode == "recover-access"), minimum_minutes=120,
     )
     if not result["ok"] and not result.get("deferred"):
@@ -61,6 +79,13 @@ def run_worker(state: State, mode: str, environment: dict, *, now: datetime | No
         # verification/refusal. No subsequent scheduled fetch is allowed.
         with state.db:
             state.put("access_paused", True)
+    if result["ok"] and isinstance(getattr(active_reader, "storage_state", None), dict):
+        with state.db:
+            state.put("browser_storage", active_reader.storage_state)
+    if common["mode"] == "scheduled-validation":
+        if result["ok"]:
+            body = f"The cloud browser read the listings successfully. Current Dortmund offers: {len(result['dortmund'])}.\n\nThe two-hour schedule is now active on GitHub; your Mac can remain off."
+            state.notice(f"activated:{environment['VALIDATION_NOT_BEFORE']}", "Cloud housing monitoring activated", body, CHANNELS)
     if slot is not None:
         outcome = "deferred" if result.get("deferred") else "ok" if result["ok"] else "failed"
         state.finish_slot(slot.isoformat(), outcome, result.get("error"))

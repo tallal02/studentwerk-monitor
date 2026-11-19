@@ -47,7 +47,10 @@ jobs:
         run: |
           python3 -m venv .cloud-venv
           .cloud-venv/bin/python -m pip install --disable-pip-version-check -r requirements-cloud.txt
+          .cloud-venv/bin/python -m playwright install --with-deps chromium
       - name: Run offline tests only
+        env:
+          RUN_BROWSER_TESTS: '1'
         run: .cloud-venv/bin/python -m unittest discover -q
       - name: Restore encrypted listing history
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -60,6 +63,7 @@ jobs:
         env:
           CLOUD_MODE: ${{ github.event_name == 'schedule' && 'tick' || inputs.mode }}
           LIVE_HOUSING_ENABLED: ${{ vars.LIVE_HOUSING_ENABLED }}
+          VALIDATION_NOT_BEFORE: ${{ vars.VALIDATION_NOT_BEFORE }}
           MANUAL_ACCESS_CONFIRMED: ${{ inputs.manual_access_confirmed }}
           CLOUD_STATE_KEY: ${{ secrets.CLOUD_STATE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
