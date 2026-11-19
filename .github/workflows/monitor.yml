@@ -1,4 +1,4 @@
-name: Dortmund housing monitor (paused until enabled)
+name: Dortmund housing monitor
 
 on:
   workflow_dispatch:

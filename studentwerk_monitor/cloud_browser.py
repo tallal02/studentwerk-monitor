@@ -1,5 +1,6 @@
 """Normal isolated Chromium session with a bounded, paced consent flow."""
 
+import json
 import time
 from urllib.parse import urlparse
 
@@ -21,6 +22,7 @@ class CloudBrowserReader:
         counts = {"documents": 0, "posts": 0, "requests": 0}
         failures = []
         last_navigation = [None]
+        stage = "browser startup"
         try:
             with sync_playwright() as playwright:
                 options = {"headless": True}
@@ -45,7 +47,7 @@ class CloudBrowserReader:
                             failures.append("The page exceeded the one-check navigation budget.")
                             route.abort()
                             return
-                        if last_navigation[0] is not None:
+                        if last_navigation[0] is not None and request.redirected_from is None:
                             remaining = self.delay - (time.monotonic() - last_navigation[0])
                             if remaining > 0:
                                 time.sleep(remaining)
@@ -59,11 +61,13 @@ class CloudBrowserReader:
 
                 context.route("**/*", route_request)
                 page.on("response", response_received)
+                stage = "opening the housing page"
                 page.goto(self.url, wait_until="domcontentloaded", timeout=45000)
                 if failures:
                     raise AccessDenied(failures[0])
                 form = page.locator("#housing-offers-access-form")
                 if form.count():
+                    stage = "loading the consent widget"
                     page.wait_for_timeout(self.delay * 1000)
                 if failures:
                     raise AccessDenied(failures[0])
@@ -74,7 +78,14 @@ class CloudBrowserReader:
                     if checkbox.count() != 1:
                         raise VerificationRequired("The known consent checkbox is unavailable; cloud access has paused.")
                     if not checkbox.is_checked():
-                        checkbox.click(timeout=45000, no_wait_after=True)
+                        stage = "clicking the consent label"
+                        identifier = checkbox.get_attribute("id")
+                        label = form.locator("label[for=" + json.dumps(identifier) + "]:visible") if identifier else None
+                        if label is not None and label.count() == 1:
+                            label.click(timeout=15000, no_wait_after=True)
+                        else:
+                            checkbox.click(timeout=15000, no_wait_after=True)
+                    stage = "waiting for the consent submission"
                     deadline = time.monotonic() + 35
                     submitted = False
                     while time.monotonic() < deadline:
@@ -84,14 +95,18 @@ class CloudBrowserReader:
                         if not form.count():
                             break
                         if counts["posts"] == 0 and not submitted:
-                            ready = form.evaluate("form => /Ihre Daten enthalten kein Spam|Your data does not contain spam/i.test(form.innerText) && form.checkValidity()")
+                            ready = page.evaluate("""() => {
+                                const form = document.getElementById('housing-offers-access-form');
+                                return !!form && /Ihre Daten enthalten kein(?:en)? Spam|Your data does not contain (?:any )?spam/i.test(form.innerText) && form.checkValidity();
+                            }""")
                             if ready:
                                 # Normal validated submission only. Observe actual
                                 # POST requests so an automatic submit is not replayed.
-                                form.evaluate("form => form.requestSubmit()")
+                                page.evaluate("() => document.getElementById('housing-offers-access-form')?.requestSubmit()")
                                 submitted = True
                     if form.count():
                         raise VerificationRequired("The normal consent flow did not unlock offers; cloud access has paused.")
+                stage = "reading the unlocked listings"
                 page.wait_for_load_state("domcontentloaded", timeout=20000)
                 if failures:
                     raise AccessDenied(failures[0])
@@ -108,5 +123,5 @@ class CloudBrowserReader:
             self.request_counts = counts
             if failures:
                 raise AccessDenied(failures[0]) from None
-            raise BrowserError(f"The cloud browser stopped after {type(exc).__name__}; no reload or retry was attempted.") from None
+            raise BrowserError(f"The cloud browser stopped during {stage} ({type(exc).__name__}); no reload or retry was attempted.") from None
 

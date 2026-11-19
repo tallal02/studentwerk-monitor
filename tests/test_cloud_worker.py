@@ -296,7 +296,8 @@ class RealBrowserFixtureTests(unittest.TestCase):
                     self.send_html(HTML)
                 else:
                     self.send_html('''<main><form id="housing-offers-access-form" method="POST">
-                    <input type="checkbox" required name="_mosparo_checkboxField_test" onchange="document.getElementById('status').innerText='Ihre Daten enthalten kein Spam';this.form.requestSubmit()">
+                    <input id="consent" type="checkbox" required style="pointer-events:none" name="_mosparo_checkboxField_test" onchange="document.getElementById('status').innerText='Ihre Daten enthalten kein Spam';this.form.requestSubmit()">
+                    <label for="consent">Accept the test consent</label>
                     <p id="status"></p></form></main>''')
             def do_POST(self):
                 requests.append(("POST", self.path))
